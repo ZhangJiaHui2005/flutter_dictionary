@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
@@ -12,9 +13,12 @@ class Definition extends StatefulWidget {
 }
 
 class _DefinitionState extends State<Definition> {
+  final AudioPlayer _audioPlayer = AudioPlayer();
+
   List<Map<String, dynamic>> _meanings = [];
   bool _isLoading = false;
   String? _error;
+  String? _audioUrl;
 
   @override
   void initState() {
@@ -27,6 +31,7 @@ class _DefinitionState extends State<Definition> {
       _isLoading = true;
       _error = null;
       _meanings = [];
+      _audioUrl = null;
     });
 
     final url = Uri.parse(
@@ -45,6 +50,18 @@ class _DefinitionState extends State<Definition> {
         for (var m in meanings) {
           final String partOfSpeech = m["partOfSpeech"];
           final List definitions = m["definitions"];
+
+          final List phonetics = data[0]['phonetics'] ?? [];
+
+          if (phonetics.isNotEmpty) {
+            final audioEntry = phonetics.firstWhere(
+                (p) => p["audio"] != null && p["audio"].toString().isNotEmpty,
+              orElse: () => {}
+            );
+
+            _audioUrl = audioEntry["audio"];
+            print("Playing audio from: $_audioUrl");
+          }
 
           for (var d in definitions) {
             parsed.add({
@@ -71,6 +88,24 @@ class _DefinitionState extends State<Definition> {
       setState(() {
         _isLoading = false;
       });
+    }
+  }
+
+  Future<void> _playAudio() async {
+    if (_audioUrl!.isEmpty && _audioUrl == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("No audio available for this word")),
+      );
+
+      return;
+    }
+
+    try {
+      await _audioPlayer.play(UrlSource(_audioUrl!));
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Error playing audio: $e")),
+      );
     }
   }
 
@@ -110,12 +145,19 @@ class _DefinitionState extends State<Definition> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              "${index + 1}. (${item["partOfSpeech"]})",
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                color: Colors.deepPurpleAccent,
-                              ),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  "${index + 1}. (${item["partOfSpeech"]})",
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.deepPurpleAccent,
+                                  ),
+                                ),
+                                
+                                IconButton(onPressed: _playAudio, icon: Icon(Icons.volume_down_alt))
+                              ],
                             ),
 
                             SizedBox(height: 6),
